@@ -14,6 +14,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"regexp"
 	"runtime"
 	"strings"
 )
@@ -177,6 +178,50 @@ func main() { //nolint:gocyclo
 				println("Decryption successful")
 
 				return nil
+			},
+		},
+		{
+			Name:      "decrypt_string",
+			Usage:     "decrypt string",
+			UsageText: "[options] [vaultfile.yml]",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:  "vault-password-file",
+					Usage: "vault password file `VAULT_PASSWORD_FILE`",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				var pw string
+				var err error
+				vaultPassword := c.String("vault-password-file")
+				pw, err = retrieveVaultPassword(vaultPassword, "Vault password:")
+				if err != nil {
+					return cli.Exit(err, 2)
+				}
+
+				var strToDecrypt string
+				strToDecrypt, err = validateAndGetStringToDecrypt(c)
+				if err != nil {
+					return cli.Exit(err, 2)
+				}
+
+				// Encrypt
+				kencs.Printf("decrypting string of length: %d", len(strToDecrypt))
+				var result string
+				result, err = avtool.Decrypt(strToDecrypt, pw)
+				if err != nil {
+					return cli.Exit(err, 2)
+				}
+
+				r := strings.Split(result, "\n")
+				for _, stringLine := range r {
+					fmt.Println("          " + stringLine)
+				}
+
+				println("Decryption successful")
+
+				return nil
+
 			},
 		},
 		{
@@ -738,6 +783,27 @@ func validateAndGetStringToEncrypt(c *cli.Context) (strToEncrypt string, err err
 	return strToEncrypt, nil
 }
 
+func validateAndGetStringToDecrypt(c *cli.Context) (strToDecrypt string, err error) {
+	k.Println("validateAndGetStringToDecrypt - start")
+	if c.NArg() <= 0 {
+		prompt := &survey.Editor{
+			Message: "Open editor to input string to decrypt",
+		}
+
+		err = survey.AskOne(prompt, &strToDecrypt)
+		if err != nil {
+			_ = cli.ShowSubcommandHelp(c)
+			return "", err
+		}
+
+		return removeTabsAndSpaces(strToDecrypt), nil
+	}
+
+	strToDecrypt = removeTabsAndSpaces(c.Args().First())
+
+	return strToDecrypt, nil
+}
+
 func validateAndGetVaultFileToCreate(c *cli.Context) (filename string, err error) {
 	k.Println("validateAndGetVaultFileToCreate - start")
 	// Validate CLI args
@@ -814,4 +880,9 @@ func getEditor() string {
 		return "vim"
 	}
 	return editorEnv
+}
+
+func removeTabsAndSpaces(strToRemove string) string {
+	reg, _ := regexp.Compile("[ \\t]+")
+	return reg.ReplaceAllString(strToRemove, "")
 }
